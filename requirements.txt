@@ -1,6 +1,5 @@
 azure-ai-projects
 azure-identity
-chainlit
+flask
 python-dotenv
-uvicorn==0.23.2
-httpcore==0.18.0
+gunicorn

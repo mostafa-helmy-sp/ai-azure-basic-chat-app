@@ -1,69 +1,77 @@
 import os
-import chainlit as cl
 import logging
+from flask import Flask, request, jsonify, render_template  # <-- render_template is now imported instead of render_template_string
 from dotenv import load_dotenv
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
 
-# Load environment variables
+# --- SETUP ---
 load_dotenv()
-
-# Disable verbose connection logs
 logger = logging.getLogger("azure.core.pipeline.policies.http_logging_policy")
 logger.setLevel(logging.WARNING)
 
-# Get environment variables
 project_endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT")
 agent_deployment_name = os.getenv("AZURE_AI_AGENT_DEPLOYMENT_NAME")
 
-# Create an instance of the AIProjectClient
-project_client = AIProjectClient(
-    endpoint=project_endpoint, credential=DefaultAzureCredential()
-)
+project_client = None
+try:
+    project_client = AIProjectClient(
+        endpoint=project_endpoint, credential=DefaultAzureCredential()
+    )
+except Exception as e:
+    logging.error(f"Failed to initialize AIProjectClient: {e}")
 
-@cl.on_chat_start
-async def on_chat_start():
-    # Create a thread for the agent
-    if not cl.user_session.get("thread_id"):
-        thread = project_client.agents.create_thread()
-        cl.user_session.set("thread_id", thread.id)
-        print(f"New Thread ID: {thread.id}")
+app = Flask(__name__)
 
-@cl.on_message
-async def on_message(message: cl.Message):
-    thread_id = cl.user_session.get("thread_id")
+# --- API ENDPOINTS ---
+
+@app.route("/")
+def index():
+    """Serves the main chat page from the template file."""
+    # This line is the only functional change
+    return render_template("index.html")
+
+@app.route("/chat", methods=["POST"])
+def chat():
+    """Handles the chat logic."""
+    data = request.json
+    content = data.get("content")
+    thread_id = data.get("thread_id")
+
+    if not project_client:
+        return jsonify({"error": "Azure AI client is not initialized. Check server logs."}), 500
+    if not content:
+        return jsonify({"error": "Content cannot be empty"}), 400
 
     try:
-        # Show thinking message to user
-        msg = await cl.Message("thinking...", author="agent").send()
+        if not thread_id:
+            thread = project_client.agents.create_thread()
+            thread_id = thread.id
 
         project_client.agents.create_message(
             thread_id=thread_id,
-            role="user",  # Use the string "user" directly
-            content=message.content,
+            role="user",
+            content=content,
         )
 
-        # Run the agent to process the message in the thread
-        run = project_client.agents.create_and_process_run(thread_id=thread_id, agent_deployment_name=agent_deployment_name)
-        print(f"Run finished with status: {run.status}")
+        run = project_client.agents.create_and_process_run(
+            thread_id=thread_id, agent_deployment_name=agent_deployment_name
+        )
 
         if run.status == "failed":
-            raise Exception(run.last_error)
+            raise Exception(run.last_error or "Agent run failed without a specific error.")
 
-        # Get all messages from the thread
         messages = project_client.agents.list_messages(thread_id)
-
-        # Get the last message from the agent by using the string "agent"
         last_msg = messages.get_last_text_message_by_role("agent")
-        if not last_msg:
-            raise Exception("No response from the model.")
 
-        msg.content = last_msg.text.value
-        await msg.update()
+        if not last_msg:
+             raise Exception("Agent did not return a message.")
+
+        return jsonify({
+            "response": last_msg.text.value,
+            "thread_id": thread_id
+        })
 
     except Exception as e:
-        await cl.Message(content=f"Error: {str(e)}").send()
-
-if __name__ == "__main__":
-    # Chainlit will automatically run the application
-    pass
+        logging.error(f"Error during chat processing: {e}")
+        return jsonify({"error": str(e)}), 500
