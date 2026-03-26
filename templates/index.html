@@ -89,8 +89,9 @@
     <div id="chat-container"></div>
     <form id="form">
         <input id="input" autocomplete="off" placeholder="Ask anything...">
-        <button id="submitBtn" disabled>&#10148;</button>
+        <button id="submitBtn" type="submit" disabled>&#10148;</button>
     </form>
+
 
     <script>
         const form = document.getElementById('form');
@@ -114,7 +115,6 @@
 
             const thinkingMessage = addMessage('...', 'agent thinking');
 
-            // --- THIS IS THE CORRECTED LOGIC ---
             try {
                 // 1. Create the request body
                 const requestBody = { content };
