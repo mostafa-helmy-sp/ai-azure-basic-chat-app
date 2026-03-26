@@ -1,4 +1,4 @@
-flask
-openai
+azure-ai-projects
 azure-identity
-gunicorn
+chainlit
+python-dotenv
