@@ -112,13 +112,13 @@
             }
 
             input.addEventListener('input', () => {
-                
+
                 console.log("Input event fired.");
                 submitBtn.disabled = !input.value.trim();
             });
 
             form.addEventListener('submit', async (e) => {
-                
+
                 console.log("Submit event fired!");
 
                 e.preventDefault();
@@ -169,12 +169,16 @@
 
             function addMessage(text, type) {
                 const messageDiv = document.createElement('div');
-                messageDiv.classList.add('message', type);
+
+                const classes = ['message', ...type.split(' ')];
+                messageDiv.classList.add(...classes);
+
                 messageDiv.textContent = text;
                 chatContainer.appendChild(messageDiv);
                 chatContainer.scrollTop = chatContainer.scrollHeight;
                 return messageDiv;
             }
+
         });
     </script>
 
