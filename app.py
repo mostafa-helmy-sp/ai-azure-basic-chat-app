@@ -4,8 +4,8 @@ import logging
 from dotenv import load_dotenv
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
-from azure.ai.projects.models import (
-    MessageRole,
+from azure.ai.projects.agents.models import (
+    MessageRole
 )
 
 # Load environment variables
