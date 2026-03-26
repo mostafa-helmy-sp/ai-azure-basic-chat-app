@@ -4,9 +4,6 @@ import logging
 from dotenv import load_dotenv
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
-from azure.ai.projects.agents.models import (
-    MessageRole
-)
 
 # Load environment variables
 load_dotenv()
@@ -42,7 +39,7 @@ async def on_message(message: cl.Message):
 
         project_client.agents.create_message(
             thread_id=thread_id,
-            role="user",
+            role="user",  # Use the string "user" directly
             content=message.content,
         )
 
@@ -56,8 +53,8 @@ async def on_message(message: cl.Message):
         # Get all messages from the thread
         messages = project_client.agents.list_messages(thread_id)
 
-        # Get the last message from the agent
-        last_msg = messages.get_last_text_message_by_role(MessageRole.AGENT)
+        # Get the last message from the agent by using the string "agent"
+        last_msg = messages.get_last_text_message_by_role("agent")
         if not last_msg:
             raise Exception("No response from the model.")
 
