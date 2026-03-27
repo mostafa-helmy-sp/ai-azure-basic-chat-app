@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
 from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
+from openai import AzureOpenAI
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', force=True)
@@ -11,18 +12,20 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # --- Load env ---
 load_dotenv()
 project_endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT")
-agent_deployment_name = os.getenv("AZURE_AI_AGENT_DEPLOYMENT_NAME")
+agent_deployment_name = os.getenv("AZURE_AI_AGENT_DEPLOYMENT_NAME") # This is used as the 'model'
 
-# --- Azure Client ---
-project_client = None
+# --- Azure Clients ---
+openai_client = None
 try:
     project_client = AIProjectClient(
         endpoint=project_endpoint,
         credential=DefaultAzureCredential()
     )
-    logging.info("AIProjectClient initialized successfully.")
+    openai_client = project_client.get_openai_client()
+    logging.info("Successfully created an authenticated OpenAI client for Responses API.")
+
 except Exception as e:
-    logging.error(f"FATAL: Could not initialize AIProjectClient: {e}", exc_info=True)
+    logging.error(f"FATAL: Could not initialize clients: {e}", exc_info=True)
 
 # --- Flask ---
 app = Flask(__name__)
@@ -34,63 +37,35 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.json
-    content = data.get("content")
-    thread_id = data.get("thread_id")
+    if not openai_client:
+        return jsonify({"error": "OpenAI client is not initialized."}), 500
 
-    if not content:
-        return jsonify({"error": "Empty message"}), 400
+    data = request.json
+    # The client now sends the entire message history
+    messages = data.get("messages")
+
+    if not messages:
+        return jsonify({"error": "Empty message list"}), 400
 
     try:
-        # --- Step 1: Get or create thread ---
-        if not thread_id:
-            logging.info("No thread_id from client. Creating new one.")
-            # VERIFIED METHOD: begin_create_thread()
-            thread_poller = project_client.agents.begin_create_thread()
-            thread = thread_poller.result()
-            thread_id = thread.id
-            logging.info(f"New thread {thread_id} created.")
-
-        # --- Step 2: Add user message to the thread ---
-        logging.info(f"Adding message to thread {thread_id}...")
-        # VERIFIED METHOD: begin_create_message()
-        message_poller = project_client.agents.begin_create_message(
-            thread_id=thread_id,
-            role="user",
-            content=content,
-        )
-        message_poller.result() # Wait for the operation to complete
-        logging.info("User message added successfully.")
-
-        # --- Step 3: Run the agent ---
-        logging.info(f"Running agent on thread {thread_id}...")
-        # VERIFIED METHOD: begin_create_and_process_run()
-        run_poller = project_client.agents.begin_create_and_process_run(
-            thread_id=thread_id,
-            agent_deployment_name=agent_deployment_name
-        )
-        run = run_poller.result() # Wait for the run to complete
-
-        if run.status == "failed":
-            raise Exception(run.last_error or "Agent run failed without a specific error.")
+        logging.info(f"Received {len(messages)} messages. Calling chat completions API...")
         
-        logging.info(f"Agent run successful. Status: {run.status}")
+        # --- Call the Responses API ---
+        completion = openai_client.chat.completions.create(
+            model=agent_deployment_name, # The agent deployment is the model
+            messages=messages
+        )
 
-        # --- Step 4: Get messages and find the latest agent response ---
-        # VERIFIED METHOD: list_messages()
-        messages = project_client.agents.list_messages(thread_id=thread_id)
-        last_agent_message = messages.get_last_text_message_by_role("agent")
+        logging.info("API call successful.")
         
-        if not last_agent_message:
-            raise Exception("No agent response found in the thread after a successful run.")
+        response_message = completion.choices[0].message
 
-        last_text = last_agent_message.text.value
-        logging.info("Successfully retrieved agent response.")
+        if not response_message or not response_message.content:
+             raise Exception("API returned an empty response.")
 
-        # Return both the response and the thread_id for the client to maintain state
-        return jsonify({"response": last_text, "thread_id": thread_id})
+        # The response from the API is a message object that can be sent back to the client
+        return jsonify(response_message)
 
     except Exception as e:
         logging.error(f"Chat error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
-
