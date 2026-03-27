@@ -14,6 +14,7 @@ logging.basicConfig(level=logging.INFO)
 # --- Load env ---
 load_dotenv()
 
+project_endpoint=os.getenv("AZURE_AI_PROJECT_ENDPOINT")
 subscription_id=os.getenv("AZURE_SUBSCRIPTION_ID")
 resource_group_name=os.getenv("AZURE_RESOURCE_GROUP")
 project_name=os.getenv("AZURE_AI_PROJECT_NAME")
@@ -21,9 +22,10 @@ agent_deployment_name = os.getenv("AZURE_AI_AGENT_DEPLOYMENT_NAME")
 
 # --- Azure Client ---
 project_client = AIProjectClient(
-    subscription_id=subscription_id,
-    resource_group_name=resource_group_name,
-    project_name=project_name,
+    endpoint=project_endpoint,
+    #subscription_id=subscription_id,
+    #resource_group_name=resource_group_name,
+    #project_name=project_name,
     credential=DefaultAzureCredential()
 )
 

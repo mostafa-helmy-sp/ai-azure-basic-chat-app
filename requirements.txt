@@ -1,4 +1,4 @@
-azure-ai-projects==1.0.0b6
+azure-ai-projects
 azure-identity
 flask
 python-dotenv
