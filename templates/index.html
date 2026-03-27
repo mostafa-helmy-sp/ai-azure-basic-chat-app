@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -13,6 +14,7 @@
             --text-color: #0d0d0d;
             --border-color: #d1d1d1;
         }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             margin: 0;
@@ -21,6 +23,7 @@
             justify-content: center;
             height: 100vh;
         }
+
         #app-container {
             width: 100%;
             max-width: 800px;
@@ -28,8 +31,9 @@
             display: flex;
             flex-direction: column;
             background-color: var(--chat-bg);
-            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
         }
+
         #chat-container {
             flex: 1;
             overflow-y: auto;
@@ -37,6 +41,7 @@
             display: flex;
             flex-direction: column;
         }
+
         #welcome-screen {
             flex: 1;
             display: flex;
@@ -46,21 +51,25 @@
             text-align: center;
             color: #555;
         }
+
         #welcome-screen h1 {
             font-size: 2.5rem;
             margin-bottom: 10px;
         }
+
         .message-wrapper {
             display: flex;
             margin-bottom: 15px;
             max-width: 85%;
         }
+
         .message {
             padding: 12px 16px;
             border-radius: 18px;
             line-height: 1.5;
             word-wrap: break-word;
         }
+
         .avatar {
             width: 32px;
             height: 32px;
@@ -73,35 +82,43 @@
             margin-right: 12px;
             flex-shrink: 0;
         }
+
         /* User styles */
         .user-wrapper {
             align-self: flex-end;
             flex-direction: row-reverse;
         }
+
         .user-wrapper .avatar {
             margin-right: 0;
             margin-left: 12px;
             background-color: #7d3c98;
         }
+
         .user {
             background-color: var(--user-bubble-bg);
             color: white;
         }
+
         /* Agent styles */
         .agent-wrapper {
             align-self: flex-start;
         }
+
         .agent-wrapper .avatar {
             background-color: #27ae60;
         }
+
         .agent {
             background-color: var(--agent-bubble-bg);
             color: var(--text-color);
         }
+
         .thinking {
             font-style: italic;
             color: #666;
         }
+
         /* Input Bar */
         #input-bar {
             display: flex;
@@ -109,6 +126,7 @@
             padding: 15px 20px;
             border-top: 1px solid var(--border-color);
         }
+
         #input-form {
             display: flex;
             width: 100%;
@@ -116,6 +134,7 @@
             border-radius: 24px;
             padding: 5px;
         }
+
         #input {
             flex: 1;
             border: none;
@@ -123,9 +142,11 @@
             font-size: 16px;
             background: transparent;
         }
+
         #input:focus {
             outline: none;
         }
+
         #send-btn {
             border: none;
             background-color: var(--user-bubble-bg);
@@ -139,12 +160,14 @@
             justify-content: center;
             align-items: center;
         }
+
         #send-btn:disabled {
             background-color: #a0a0a0;
             cursor: not-allowed;
         }
     </style>
 </head>
+
 <body>
     <div id="app-container">
         <div id="chat-container">
@@ -168,6 +191,9 @@
             const sendBtn = document.getElementById('send-btn');
             const chatContainer = document.getElementById('chat-container');
             const welcomeScreen = document.getElementById('welcome-screen');
+
+            // This will hold the session state.
+            let thread_id = null;
 
             input.addEventListener('input', () => {
                 sendBtn.disabled = !input.value.trim();
@@ -194,11 +220,19 @@
                 thinkingMessage.querySelector('.message').classList.add('thinking');
 
                 try {
+                    // --- THIS IS THE CORRECTED LOGIC ---
+                    // 1. Build the request body
+                    const requestBody = { content };
+                    // 2. If we have a thread_id from a previous turn, send it.
+                    if (thread_id) {
+                        requestBody.thread_id = thread_id;
+                    }
+
                     const response = await fetch('/chat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         credentials: 'include',
-                        body: JSON.stringify({ content })
+                        body: JSON.stringify(requestBody) // Use the correctly built body
                     });
 
                     if (!response.ok) {
@@ -207,6 +241,10 @@
                     }
 
                     const data = await response.json();
+
+                    // 3. IMPORTANT: Store the thread_id returned by the server.
+                    thread_id = data.thread_id;
+
                     thinkingMessage.querySelector('.message').textContent = data.response;
                     thinkingMessage.querySelector('.message').classList.remove('thinking');
 
@@ -228,7 +266,7 @@
                 const messageDiv = document.createElement('div');
                 messageDiv.className = `message ${role}`;
                 messageDiv.textContent = text;
-                
+
                 wrapper.appendChild(avatar);
                 wrapper.appendChild(messageDiv);
                 chatContainer.appendChild(wrapper);
@@ -237,5 +275,7 @@
             }
         });
     </script>
+
 </body>
+
 </html>
