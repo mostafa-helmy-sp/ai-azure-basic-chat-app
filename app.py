@@ -36,50 +36,35 @@ def index():
 def chat():
     data = request.json
     content = data.get("content")
-    thread_id = data.get("thread_id")  # Get thread_id from the client
+    session_id = data.get("thread_id") 
 
     if not content:
         return jsonify({"error": "Empty message"}), 400
 
     try:
-        # --- Get or create thread ---
-        if not thread_id:
-            logging.info("No thread_id from client. Creating new one.")
-            thread = project_client.agents.create_thread()
-            thread_id = thread.id
-            logging.info(f"New thread {thread_id} created.")
+        if not session_id:
+            logging.info("No session_id from client. Starting a new chat session.")
+            chat_session = project_client.agents.start_chat_session()
+            session_id = chat_session.id
+            logging.info(f"New session {session_id} started.")
 
-        # --- Add message ---
-        logging.info(f"Adding message to thread {thread_id}...")
-        project_client.agents.create_message(
-            thread_id=thread_id,
-            role="user",
-            content=content,
+        logging.info(f"Getting response for session {session_id}...")
+        
+        response_data = project_client.agents.get_chat_session_response(
+            message=content,
+            chat_session_id=session_id
         )
 
-        # --- Run agent ---
-        logging.info(f"Running agent on thread {thread_id}...")
-        run = project_client.agents.create_and_process_run(
-            thread_id=thread_id,
-            agent_deployment_name=agent_deployment_name
-        )
-
-        if run.status == "failed":
-            raise Exception(run.last_error)
+        agent_reply = response_data.get("response")
         
-        logging.info(f"Agent run successful. Status: {run.status}")
+        if not agent_reply:
+            raise Exception("Agent run succeeded, but the response was empty.")
 
-        messages = project_client.agents.list_messages(thread_id=thread_id)
-        last_agent_message = messages.get_last_text_message_by_role("agent")
-        
-        if not last_agent_message:
-            raise Exception("No agent response found")
-
-        last_text = last_agent_message.text.value
         logging.info("Successfully retrieved agent response.")
 
-        return jsonify({"response": last_text, "thread_id": thread_id})
+        return jsonify({"response": agent_reply, "thread_id": session_id})
 
     except Exception as e:
         logging.error(f"Chat error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
