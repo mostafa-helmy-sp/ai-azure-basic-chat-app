@@ -2,30 +2,35 @@ import os
 import logging
 from flask import Flask, request, jsonify, render_template
 from dotenv import load_dotenv
-from azure.ai.projects import AIProjectClient
-from azure.identity import DefaultAzureCredential
-from openai import AzureOpenAI
+from openai import OpenAI
+from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 
 # --- Logging ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', force=True)
 
 # --- Load env ---
 load_dotenv()
-project_endpoint = os.getenv("AZURE_AI_PROJECT_ENDPOINT")
-agent_deployment_name = os.getenv("AZURE_AI_AGENT_DEPLOYMENT_NAME") # This is used as the 'model'
 
-# --- Azure Clients ---
-openai_client = None
-try:
-    project_client = AIProjectClient(
-        endpoint=project_endpoint,
-        credential=DefaultAzureCredential()
-    )
-    openai_client = project_client.get_openai_client()
-    logging.info("Successfully created an authenticated OpenAI client for Responses API.")
+AGENT_BASE_URL = os.getenv("AGENT_BASE_URL")
 
-except Exception as e:
-    logging.error(f"FATAL: Could not initialize clients: {e}", exc_info=True)
+# --- OpenAI Client for Foundry ---
+client = None
+if not all([AGENT_BASE_URL]):
+    logging.error("FATAL: AGENT_BASE_URL is required.")
+else:
+    try:
+
+        # Create the OpenAI client exactly as specified in the documentation
+        client = OpenAI(
+            api_key=get_bearer_token_provider(DefaultAzureCredential(), "https://ai.azure.com/.default"),
+            base_url=AGENT_BASE_URL,
+            default_query={"api-version": "2025-11-15-preview"}
+        )
+        logging.info("OpenAI client for Foundry initialized successfully.")
+
+    except Exception as e:
+        logging.error(f"FATAL: Could not initialize OpenAI client: {e}", exc_info=True)
+
 
 # --- Flask ---
 app = Flask(__name__)
@@ -37,35 +42,39 @@ def index():
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    if not openai_client:
+    if not client:
         return jsonify({"error": "OpenAI client is not initialized."}), 500
 
     data = request.json
-    # The client now sends the entire message history
-    messages = data.get("messages")
+    messages = data.get("messages", [])
 
     if not messages:
         return jsonify({"error": "Empty message list"}), 400
 
+    # Separate the last user message as the 'input' and the rest as 'history'
+    current_input = messages[-1]['content']
+    chat_history = messages[:-1]
+
     try:
-        logging.info(f"Received {len(messages)} messages. Calling chat completions API...")
+        logging.info(f"Invoking agent via responses.create()...")
         
-        # --- Call the Responses API ---
-        completion = openai_client.chat.completions.create(
-            model=agent_deployment_name, # The agent deployment is the model
-            messages=messages
+        # --- THIS IS THE CORRECT METHOD FROM YOUR DOCUMENTATION ---
+        response = client.responses.create(
+            input=current_input,
+            chat_history=chat_history
         )
 
-        logging.info("API call successful.")
+        logging.info("Agent invocation successful.")
         
-        response_message = completion.choices[0].message
+        # The response object has an 'output_text' attribute
+        agent_reply = response.output_text
 
-        if not response_message or not response_message.content:
-             raise Exception("API returned an empty response.")
+        if not agent_reply:
+             raise Exception(f"Agent response did not contain 'output_text'. Full Response: {response}")
 
-        # The response from the API is a message object that can be sent back to the client
-        return jsonify(response_message)
+        return jsonify({"role": "assistant", "content": agent_reply})
 
     except Exception as e:
         logging.error(f"Chat error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
+
