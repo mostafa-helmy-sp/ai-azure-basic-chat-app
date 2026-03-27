@@ -12,23 +12,19 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 load_dotenv()
 
 # Environment variables from the authoritative documentation you provided
-FOUNDRY_RESOURCE_NAME = os.getenv("AZURE_FOUNDRY_RESOURCE_NAME")
-PROJECT_NAME = os.getenv("AZURE_PROJECT_NAME")
-APP_NAME = os.getenv("AZURE_APP_NAME")
+AGENT_BASE_URL = os.getenv("AGENT_BASE_URL")
 
 # --- OpenAI Client for Foundry ---
 client = None
-if not all([FOUNDRY_RESOURCE_NAME, PROJECT_NAME, APP_NAME]):
-    logging.error("FATAL: AZURE_FOUNDRY_RESOURCE_NAME, AZURE_PROJECT_NAME, and AZURE_APP_NAME are required.")
+if not all([AGENT_BASE_URL]):
+    logging.error("FATAL: AGENT_BASE_URL are required.")
 else:
     try:
-        # Construct the BASE_URL exactly as specified in the docs
-        BASE_URL = f"https://{FOUNDRY_RESOURCE_NAME}.services.ai.azure.com/api/projects/{PROJECT_NAME}/applications/{APP_NAME}/protocols/openai"
 
         # Create the OpenAI client using the exact pattern from the docs
         client = OpenAI(
             api_key=get_bearer_token_provider(DefaultAzureCredential(), "https://ai.azure.com/.default"),
-            base_url=BASE_URL,
+            base_url=AGENT_BASE_URL,
             default_query={"api-version": "2025-11-15-preview"}
         )
         logging.info("OpenAI client for Foundry initialized successfully, as per documentation.")
@@ -57,7 +53,7 @@ def chat():
         return jsonify({"error": "Empty message list"}), 400
 
     try:
-        logging.info(f"Invoking agent '{APP_NAME}' via responses.create() with {len(messages)} messages in the 'input' parameter...")
+        logging.info(f"Invoking agent via responses.create() with {len(messages)} messages in the 'input' parameter...")
         
         # --- THE CORRECTED METHOD CALL BASED ON YOUR DOCUMENTATION ---
         # The entire conversation history is passed to the 'input' parameter
