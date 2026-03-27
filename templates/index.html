@@ -192,7 +192,7 @@
             const chatContainer = document.getElementById('chat-container');
             const welcomeScreen = document.getElementById('welcome-screen');
 
-            // This will hold the session state.
+            // This will hold the session state for the single user.
             let thread_id = null;
 
             input.addEventListener('input', () => {
@@ -220,10 +220,8 @@
                 thinkingMessage.querySelector('.message').classList.add('thinking');
 
                 try {
-                    // --- THIS IS THE CORRECTED LOGIC ---
-                    // 1. Build the request body
                     const requestBody = { content };
-                    // 2. If we have a thread_id from a previous turn, send it.
+                    // If we have a thread_id from a previous turn, send it.
                     if (thread_id) {
                         requestBody.thread_id = thread_id;
                     }
@@ -231,8 +229,8 @@
                     const response = await fetch('/chat', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify(requestBody) // Use the correctly built body
+                        // credentials: 'include' is removed as it's no longer needed
+                        body: JSON.stringify(requestBody)
                     });
 
                     if (!response.ok) {
@@ -242,7 +240,7 @@
 
                     const data = await response.json();
 
-                    // 3. IMPORTANT: Store the thread_id returned by the server.
+                    // Store the thread_id returned by the server for the next request.
                     thread_id = data.thread_id;
 
                     thinkingMessage.querySelector('.message').textContent = data.response;
