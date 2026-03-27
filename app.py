@@ -11,22 +11,27 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 # --- Load env ---
 load_dotenv()
 
-AGENT_BASE_URL = os.getenv("AGENT_BASE_URL")
+# Environment variables from the authoritative documentation you provided
+FOUNDRY_RESOURCE_NAME = os.getenv("AZURE_FOUNDRY_RESOURCE_NAME")
+PROJECT_NAME = os.getenv("AZURE_PROJECT_NAME")
+APP_NAME = os.getenv("AZURE_APP_NAME")
 
 # --- OpenAI Client for Foundry ---
 client = None
-if not all([AGENT_BASE_URL]):
-    logging.error("FATAL: AGENT_BASE_URL is required.")
+if not all([FOUNDRY_RESOURCE_NAME, PROJECT_NAME, APP_NAME]):
+    logging.error("FATAL: AZURE_FOUNDRY_RESOURCE_NAME, AZURE_PROJECT_NAME, and AZURE_APP_NAME are required.")
 else:
     try:
+        # Construct the BASE_URL exactly as specified in the docs
+        BASE_URL = f"https://{FOUNDRY_RESOURCE_NAME}.services.ai.azure.com/api/projects/{PROJECT_NAME}/applications/{APP_NAME}/protocols/openai"
 
-        # Create the OpenAI client exactly as specified in the documentation
+        # Create the OpenAI client using the exact pattern from the docs
         client = OpenAI(
             api_key=get_bearer_token_provider(DefaultAzureCredential(), "https://ai.azure.com/.default"),
-            base_url=AGENT_BASE_URL,
+            base_url=BASE_URL,
             default_query={"api-version": "2025-11-15-preview"}
         )
-        logging.info("OpenAI client for Foundry initialized successfully.")
+        logging.info("OpenAI client for Foundry initialized successfully, as per documentation.")
 
     except Exception as e:
         logging.error(f"FATAL: Could not initialize OpenAI client: {e}", exc_info=True)
@@ -51,27 +56,24 @@ def chat():
     if not messages:
         return jsonify({"error": "Empty message list"}), 400
 
-    # Separate the last user message as the 'input' and the rest as 'history'
-    current_input = messages[-1]['content']
-    chat_history = messages[:-1]
-
     try:
-        logging.info(f"Invoking agent via responses.create()...")
+        logging.info(f"Invoking agent '{APP_NAME}' via responses.create() with {len(messages)} messages in the 'input' parameter...")
         
-        # --- THIS IS THE CORRECT METHOD FROM YOUR DOCUMENTATION ---
+        # --- THE CORRECTED METHOD CALL BASED ON YOUR DOCUMENTATION ---
+        # The entire conversation history is passed to the 'input' parameter
+        # because the API is stateless.
         response = client.responses.create(
-            input=current_input,
-            chat_history=chat_history
+            input=messages
         )
 
         logging.info("Agent invocation successful.")
         
-        # The response object has an 'output_text' attribute
         agent_reply = response.output_text
 
         if not agent_reply:
              raise Exception(f"Agent response did not contain 'output_text'. Full Response: {response}")
 
+        # The client expects a JSON object with role and content
         return jsonify({"role": "assistant", "content": agent_reply})
 
     except Exception as e:
